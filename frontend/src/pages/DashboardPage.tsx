@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getTrees, createTree } from '@/api/trees'
-import { useAuthStore } from '@/store/authStore'
+import Navbar from '@/components/Navbar'
 import type { FamilyTree } from '@/types'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
   const [trees, setTrees] = useState<FamilyTree[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -30,19 +29,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navbar */}
-      <nav className="bg-[#0053e2] text-white px-6 py-4 flex items-center justify-between">
-        <span className="text-xl font-bold">🌳 Family Tree</span>
-        <div className="flex items-center gap-4">
-          <span className="text-sm opacity-80">Hi, {user?.name}</span>
-          <button
-            onClick={logout}
-            className="text-sm bg-white text-[#0053e2] px-3 py-1.5 rounded-lg font-medium hover:bg-blue-50 transition"
-          >
-            Sign Out
-          </button>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">

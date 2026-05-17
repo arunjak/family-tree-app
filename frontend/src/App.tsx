@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
+import TreeViewPage from '@/pages/TreeViewPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)()
@@ -20,6 +21,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/trees/:id"
+          element={
+            <ProtectedRoute>
+              <TreeViewPage />
             </ProtectedRoute>
           }
         />
