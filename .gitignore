@@ -1,11 +1,11 @@
 # Java / Maven
 target/
 *.class
-*.jar
 *.war
 *.ear
-.mvn/
-!.mvn/wrapper/maven-wrapper.jar
+# Keep .mvn/wrapper tracked (needed for ./mvnw to work)
+# Only ignore the downloaded jar (it's auto-downloaded)
+backend/.mvn/wrapper/maven-wrapper.jar
 
 # Spring Boot
 application-local.yml
