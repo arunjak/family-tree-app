@@ -1,65 +1,75 @@
 package com.familytree.common;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
+/**
+ * Handles photo storage via Cloudinary.
+ * Each person gets one photo slot: public_id = "family-tree/person_{personId}"
+ * Uploading again auto-overwrites — no orphan files ever.
+ */
 @Service
 public class FileStorageService {
 
     private static final Set<String> ALLOWED = Set.of("jpg", "jpeg", "png", "gif", "webp");
     private static final long MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+    private static final String FOLDER = "family-tree";
 
-    private final Path uploadDir;
+    private final Cloudinary cloudinary;
 
-    public FileStorageService(@Value("${file.upload-dir}") String dir) throws IOException {
-        this.uploadDir = Paths.get(dir).toAbsolutePath().normalize();
-        Files.createDirectories(this.uploadDir);
+    public FileStorageService(@Value("${cloudinary.url}") String cloudinaryUrl) {
+        this.cloudinary = new Cloudinary(cloudinaryUrl);
+        this.cloudinary.config.secure = true;
     }
 
+    /** Upload file → returns the Cloudinary secure HTTPS URL */
+    @SuppressWarnings("unchecked")
     public String store(MultipartFile file, Long personId) {
-        if (file.isEmpty()) throw new IllegalArgumentException("File is empty");
-        if (file.getSize() > MAX_BYTES) throw new IllegalArgumentException("File must be under 5 MB");
-
-        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
-        String ext = extension(original).toLowerCase();
-        if (!ALLOWED.contains(ext)) throw new IllegalArgumentException("Only jpg, png, gif, webp allowed");
-
-        String filename = "person_" + personId + "_" + UUID.randomUUID() + "." + ext;
+        validate(file);
         try {
-            Files.copy(file.getInputStream(), uploadDir.resolve(filename),
-                    StandardCopyOption.REPLACE_EXISTING);
+            Map<String, Object> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "public_id", FOLDER + "/person_" + personId,
+                            "overwrite", true,
+                            "resource_type", "image"
+                    )
+            );
+            return (String) result.get("secure_url");
         } catch (IOException e) {
-            throw new IllegalStateException("Could not save photo: " + e.getMessage());
+            throw new IllegalStateException("Cloudinary upload failed: " + e.getMessage());
         }
-        return filename;
     }
 
-    public void delete(String filename) {
-        if (filename == null || filename.isBlank()) return;
+    /** Delete photo for a person. Safe to call even if no photo exists. */
+    public void delete(Long personId) {
         try {
-            Path target = uploadDir.resolve(filename).normalize();
-            if (target.startsWith(uploadDir)) Files.deleteIfExists(target);
-        } catch (IOException ignored) {}
+            cloudinary.uploader().destroy(
+                    FOLDER + "/person_" + personId,
+                    ObjectUtils.asMap("resource_type", "image")
+            );
+        } catch (IOException ignored) {
+            // best-effort — don't fail the request if Cloudinary delete fails
+        }
     }
 
-    /** Extract just the filename from a stored photoUrl like /api/files/person_1_xxx.jpg */
-    public String filenameFromUrl(String photoUrl) {
-        if (photoUrl == null) return null;
-        return photoUrl.substring(photoUrl.lastIndexOf('/') + 1);
-    }
+    private void validate(MultipartFile file) {
+        if (file == null || file.isEmpty())
+            throw new IllegalArgumentException("File is empty");
+        if (file.getSize() > MAX_BYTES)
+            throw new IllegalArgumentException("File must be under 5 MB");
 
-    public Path resolve(String filename) {
-        return uploadDir.resolve(filename).normalize();
-    }
-
-    private String extension(String name) {
+        String name = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
         int dot = name.lastIndexOf('.');
-        return dot >= 0 ? name.substring(dot + 1) : "";
+        String ext = dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+        if (!ALLOWED.contains(ext))
+            throw new IllegalArgumentException("Only jpg, png, gif, webp allowed");
     }
 }

@@ -25,6 +25,21 @@ spring:
       enabled: true
       path: /h2-console
 
+# Dev overrides for secrets — set CLOUDINARY_URL + JWT_SECRET in your shell
+# or create a local .env file and export them before running.
+jwt:
+  secret: ${JWT_SECRET:local-dev-secret-key-min-32-chars-abc}
+  expiration-ms: 86400000
+
+# CLOUDINARY_URL must be set even in dev if you want to test photo uploads.
+# Get it free from cloudinary.com → Dashboard → copy "API Environment variable"
+# export CLOUDINARY_URL=cloudinary://key:secret@cloud_name
+cloudinary:
+  url: ${CLOUDINARY_URL:cloudinary://placeholder:placeholder@placeholder}
+
+cors:
+  allowed-origins: http://localhost:5173,http://localhost:3000
+
 logging:
   level:
     com.familytree: DEBUG

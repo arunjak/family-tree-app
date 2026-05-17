@@ -96,6 +96,13 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!-- Cloudinary (photo storage) -->
+    <dependency>
+      <groupId>com.cloudinary</groupId>
+      <artifactId>cloudinary-http44</artifactId>
+      <version>1.38.0</version>
+    </dependency>
+
     <!-- Test -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

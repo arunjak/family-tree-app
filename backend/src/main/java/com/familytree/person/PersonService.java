@@ -87,13 +87,9 @@ public class PersonService {
         Person person = personRepository.findByIdAndTreeId(personId, treeId)
                 .orElseThrow(() -> new IllegalArgumentException("Person not found"));
 
-        // Delete old photo if present
-        if (person.getPhotoUrl() != null) {
-            fileStorageService.delete(fileStorageService.filenameFromUrl(person.getPhotoUrl()));
-        }
-
-        String filename = fileStorageService.store(file, personId);
-        person.setPhotoUrl("/api/files/" + filename);
+        // Cloudinary auto-overwrites the same public_id — no manual cleanup needed
+        String secureUrl = fileStorageService.store(file, personId);
+        person.setPhotoUrl(secureUrl);
         return PersonResponse.from(personRepository.save(person));
     }
 
@@ -102,10 +98,8 @@ public class PersonService {
         treeService.getOwnedTree(treeId);
         Person person = personRepository.findByIdAndTreeId(personId, treeId)
                 .orElseThrow(() -> new IllegalArgumentException("Person not found"));
-        if (person.getPhotoUrl() != null) {
-            fileStorageService.delete(fileStorageService.filenameFromUrl(person.getPhotoUrl()));
-            person.setPhotoUrl(null);
-        }
+        fileStorageService.delete(personId);
+        person.setPhotoUrl(null);
         return PersonResponse.from(personRepository.save(person));
     }
 }

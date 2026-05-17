@@ -1,0 +1,60 @@
+# Render Blueprint — defines both services in one file
+# Docs: https://render.com/docs/blueprint-spec
+#
+# After deploying:
+#   1. Fill in the secret env vars marked with `sync: false` in the Render dashboard
+#   2. Set VITE_API_URL in the frontend service to your backend's Render URL
+#   3. Set CORS_ALLOWED_ORIGINS in the backend service to your frontend's Render URL
+
+services:
+
+  # ── Spring Boot Backend ────────────────────────────────────────────────────
+  - type: web
+    name: family-tree-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    healthCheckPath: /api/actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+      # ── Database (Neon) ──
+      # Get these from your Neon dashboard → Connection Details
+      - key: DB_URL
+        sync: false   # set manually in Render dashboard
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # ── Auth ──
+      - key: JWT_SECRET
+        generateValue: true   # Render auto-generates a secure random value
+      - key: JWT_EXPIRATION_MS
+        value: "86400000"
+
+      # ── Cloudinary ──
+      # Get from: cloudinary.com → Dashboard → "API Environment variable"
+      - key: CLOUDINARY_URL
+        sync: false
+
+      # ── CORS ──
+      # Set this to your Render frontend URL after deploying frontend
+      # e.g. https://family-tree-frontend.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+  # ── React Frontend ─────────────────────────────────────────────────────────
+  - type: web
+    name: family-tree-frontend
+    runtime: docker
+    dockerfilePath: frontend/Dockerfile
+    dockerContext: frontend
+    plan: free
+    envVars:
+      # Set this to your Render backend URL after deploying backend
+      # e.g. https://family-tree-backend.onrender.com
+      - key: VITE_API_URL
+        sync: false
