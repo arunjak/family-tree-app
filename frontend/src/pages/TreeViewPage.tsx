@@ -183,6 +183,7 @@ export default function TreeViewPage() {
             allPersons={persons}
             onEdit={(p) => { setEditingPerson(p); setModal('editPerson') }}
             onDelete={handleDeletePerson}
+            onDeleteRelationship={handleDeleteRelationship}
             onAddRelationship={openAddRelationship}
             onClose={() => setSelectedPerson(null)}
           />

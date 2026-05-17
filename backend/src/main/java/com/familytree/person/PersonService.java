@@ -3,6 +3,7 @@ package com.familytree.person;
 import com.familytree.person.dto.PersonRequest;
 import com.familytree.person.dto.PersonResponse;
 import com.familytree.tree.FamilyTree;
+import com.familytree.relationship.RelationshipRepository;
 import com.familytree.tree.FamilyTreeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ public class PersonService {
 
     private final PersonRepository personRepository;
     private final FamilyTreeService treeService;
+    private final RelationshipRepository relationshipRepository;
 
     public List<PersonResponse> getAllPersons(Long treeId) {
         treeService.getOwnedTree(treeId); // verify ownership
@@ -65,6 +67,8 @@ public class PersonService {
         treeService.getOwnedTree(treeId);
         Person person = personRepository.findByIdAndTreeId(personId, treeId)
                 .orElseThrow(() -> new IllegalArgumentException("Person not found"));
+        // Delete all relationships first to avoid FK constraint violations
+        relationshipRepository.deleteAllByPersonId(personId);
         personRepository.delete(person);
     }
 

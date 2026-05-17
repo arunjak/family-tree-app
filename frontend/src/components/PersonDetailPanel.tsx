@@ -6,6 +6,7 @@ interface Props {
   allPersons: Person[]
   onEdit: (p: Person) => void
   onDelete: (p: Person) => void
+  onDeleteRelationship: (relationshipId: number) => void
   onAddRelationship: (personId: number) => void
   onClose: () => void
 }
@@ -20,6 +21,7 @@ export default function PersonDetailPanel({
   allPersons,
   onEdit,
   onDelete,
+  onDeleteRelationship,
   onAddRelationship,
   onClose,
 }: Props) {
@@ -91,10 +93,17 @@ export default function PersonDetailPanel({
               const otherId = r.personId === person.id ? r.relatedPersonId : r.personId
               const other = findPerson(otherId)
               return (
-                <li key={r.id} className="flex items-center gap-2 text-sm text-gray-700">
+                <li key={r.id} className="flex items-center gap-2 text-sm text-gray-700 group">
                   <span className="text-base">{RELATION_EMOJI[r.relationType] ?? '🔗'}</span>
-                  <span className="font-medium capitalize">{r.relationType.toLowerCase()}</span>
-                  <span className="text-gray-500">of {other ? personName(other) : '?'}</span>
+                  <span className="font-medium capitalize flex-1">{r.relationType.toLowerCase()}</span>
+                  <span className="text-gray-500 flex-1 truncate">of {other ? personName(other) : '?'}</span>
+                  <button
+                    onClick={() => onDeleteRelationship(r.id)}
+                    title="Remove relationship"
+                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity text-base leading-none ml-1"
+                  >
+                    ✕
+                  </button>
                 </li>
               )
             })}

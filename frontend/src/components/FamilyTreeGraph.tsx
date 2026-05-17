@@ -94,6 +94,19 @@ function buildLayout(persons: Person[], relationships: Relationship[]) {
 
   for (const p of persons) buildUnit(p.id)
 
+  // ── Deduplicate children ────────────────────────────────────────────────────
+  // A child unit may have been claimed by multiple parent units (e.g. mom AND
+  // dad both have PARENT → son, but aren't marked as spouses). Keep only the
+  // first claim so every unit has exactly one parent → no double-positioning.
+  const claimedAsChild = new Set<string>()
+  for (const u of units.values()) {
+    u.childIds = u.childIds.filter(cid => {
+      if (claimedAsChild.has(cid)) return false
+      claimedAsChild.add(cid)
+      return true
+    })
+  }
+
   // Find roots (units not referenced as a child)
   const allChildIds = new Set<string>()
   for (const u of units.values()) u.childIds.forEach(c => allChildIds.add(c))
@@ -172,9 +185,12 @@ export default function FamilyTreeGraph({ persons, relationships, selectedId, on
     // Compute canvas size
     let maxX = 0, maxY = 0
     for (const u of units.values()) {
-      maxX = Math.max(maxX, card1X(u) + (u.members.length === 2 ? CARD_W * 2 + COUPLE_GAP : CARD_W))
-      maxY = Math.max(maxY, u.y + CARD_H)
+      const ux = card1X(u) + (u.members.length === 2 ? CARD_W * 2 + COUPLE_GAP : CARD_W)
+      const uy = u.y + CARD_H
+      if (isFinite(ux)) maxX = Math.max(maxX, ux)
+      if (isFinite(uy)) maxY = Math.max(maxY, uy)
     }
+    if (maxX === 0 || maxY === 0) return // nothing valid to render
     const canvasW = maxX + PAD
     const canvasH = maxY + PAD
 
