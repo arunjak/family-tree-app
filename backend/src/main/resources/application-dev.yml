@@ -37,6 +37,11 @@ jwt:
 cloudinary:
   url: ${CLOUDINARY_URL:cloudinary://placeholder:placeholder@placeholder}
 
+# Admin-only mode — off by default in dev
+app:
+  admin-only-mode: ${ADMIN_ONLY_MODE:false}
+  admin-email: ${ADMIN_EMAIL:}
+
 cors:
   allowed-origins: http://localhost:5173,http://localhost:3000
 

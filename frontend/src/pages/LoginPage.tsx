@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { login } from '@/api/auth'
+import { login, getAuthStatus } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 
 export default function LoginPage() {
@@ -10,6 +10,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [adminOnlyMode, setAdminOnlyMode] = useState(false)
+
+  useEffect(() => {
+    getAuthStatus().then(({ data }) => setAdminOnlyMode(data.adminOnlyMode)).catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,7 +37,14 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-md p-8">
         <h1 className="text-3xl font-bold text-center text-[#0053e2] mb-2">🌳 Family Tree</h1>
-        <p className="text-center text-gray-500 mb-8">Sign in to your account</p>
+        <p className="text-center text-gray-500 mb-6">Sign in to your account</p>
+
+        {adminOnlyMode && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 mb-5 text-sm flex items-center gap-2">
+            <span className="text-base">🔒</span>
+            <span>This app is in <strong>admin-only mode</strong>. New registrations are disabled.</span>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-6 text-sm">
@@ -72,12 +84,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          No account?{' '}
-          <Link to="/register" className="text-[#0053e2] font-medium hover:underline">
-            Create one
-          </Link>
-        </p>
+        {!adminOnlyMode && (
+          <p className="mt-6 text-center text-sm text-gray-500">
+            No account?{' '}
+            <Link to="/register" className="text-[#0053e2] font-medium hover:underline">
+              Create one
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )

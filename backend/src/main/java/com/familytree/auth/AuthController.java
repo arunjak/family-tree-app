@@ -30,4 +30,12 @@ public class AuthController {
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("pong");
     }
+
+    /** Returns current mode so frontend can hide registration when locked down */
+    @GetMapping("/status")
+    public ResponseEntity<java.util.Map<String, Object>> status() {
+        return ResponseEntity.ok(java.util.Map.of(
+                "adminOnlyMode", authService.isAdminOnlyMode()
+        ));
+    }
 }

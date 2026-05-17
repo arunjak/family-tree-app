@@ -6,3 +6,6 @@ export const register = (name: string, email: string, password: string) =>
 
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>('/auth/login', { email, password })
+
+export const getAuthStatus = () =>
+  api.get<{ adminOnlyMode: boolean }>('/auth/status')

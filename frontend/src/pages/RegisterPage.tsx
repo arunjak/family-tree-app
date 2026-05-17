@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { register } from '@/api/auth'
+import { register, getAuthStatus } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 
 export default function RegisterPage() {
@@ -9,6 +9,15 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [adminOnlyMode, setAdminOnlyMode] = useState(false)
+  const [statusLoading, setStatusLoading] = useState(true)
+
+  useEffect(() => {
+    getAuthStatus()
+      .then(({ data }) => setAdminOnlyMode(data.adminOnlyMode))
+      .catch(() => {})
+      .finally(() => setStatusLoading(false))
+  }, [])
 
   const update = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
@@ -28,6 +37,37 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Show locked screen while checking status
+  if (statusLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-400">Loading...</p>
+      </div>
+    )
+  }
+
+  // Admin-only mode — block registration entirely
+  if (adminOnlyMode) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-md p-8 text-center">
+          <p className="text-5xl mb-4">🔒</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Registration Disabled</h1>
+          <p className="text-gray-500 mb-6">
+            This app is currently in <strong>admin-only mode</strong>.<br />
+            New accounts cannot be created at this time.
+          </p>
+          <Link
+            to="/login"
+            className="inline-block bg-[#0053e2] text-white font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-700 transition"
+          >
+            Go to Login
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
