@@ -84,13 +84,28 @@ Frontend runs at: http://localhost:5173
 ## Development Phases
 
 - [x] Phase 1 — Project scaffold + Auth + Docker
-- [ ] Phase 2 — Person & Relationship CRUD APIs
+- [x] Phase 2 — Person & Relationship CRUD APIs
 - [ ] Phase 3 — React UI + D3.js tree visualization
-- [ ] Phase 4 — Relationship Finder (BFS engine)
+- [ ] Phase 4 — Relationship Finder UI
 - [ ] Phase 5 — Photo uploads + polish
+- [ ] Phase 6 — Production deployment (Railway/Render)
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | /api/auth/register | Create account |
+| POST | /api/auth/login | Login → JWT |
+| GET/POST | /api/trees | List / create trees |
+| PUT/DELETE | /api/trees/{id} | Update / delete tree |
+| GET/POST | /api/trees/{id}/persons | List / add persons |
+| PUT/DELETE | /api/trees/{id}/persons/{pid} | Update / delete person |
+| GET/POST | /api/trees/{id}/relationships | List / add relationships |
+| DELETE | /api/trees/{id}/relationships/{rid} | Remove relationship |
+| GET | /api/trees/{id}/find-path?from=&to= | BFS relationship finder |
 
 ## Context (for Code Puppy 🐾)
 
-- **Current Phase:** 1 - Project scaffold + Auth
+- **Current Phase:** 2 complete — All CRUD APIs + BFS graph engine built
 - **Stack decisions:** JWT stateless auth, BFS for relationship finder, D3.js for viz
-- **Next:** Phase 2 - Person & Relationship CRUD
+- **Next:** Phase 3 - React UI + D3.js Tree Visualization
