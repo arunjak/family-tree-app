@@ -1,6 +1,7 @@
 package com.familytree.common;
 
 import com.cloudinary.Cloudinary;
+import com.cloudinary.Transformation;
 import com.cloudinary.utils.ObjectUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,12 @@ import java.util.Set;
  * Handles photo storage via Cloudinary.
  * Each person gets one photo slot: public_id = "family-tree/person_{personId}"
  * Uploading again auto-overwrites — no orphan files ever.
+ *
+ * Optimization applied to every served URL:
+ *   - c_fill + g_face  → square crop focused on face
+ *   - w_500, h_500     → consistent size for profile cards
+ *   - f_auto           → serves WebP/AVIF to modern browsers, JPEG to older
+ *   - q_auto           → Cloudinary picks best quality/size ratio automatically
  */
 @Service
 public class FileStorageService {
@@ -29,20 +36,26 @@ public class FileStorageService {
         this.cloudinary.config.secure = true;
     }
 
-    /** Upload file → returns the Cloudinary secure HTTPS URL */
+    /**
+     * Upload original file → returns an optimized Cloudinary CDN URL.
+     * The original is stored at full quality; transformations are applied
+     * on-the-fly by Cloudinary's CDN and cached globally.
+     */
     @SuppressWarnings("unchecked")
     public String store(MultipartFile file, Long personId) {
         validate(file);
+        String publicId = FOLDER + "/person_" + personId;
         try {
-            Map<String, Object> result = cloudinary.uploader().upload(
+            cloudinary.uploader().upload(
                     file.getBytes(),
                     ObjectUtils.asMap(
-                            "public_id", FOLDER + "/person_" + personId,
+                            "public_id", publicId,
                             "overwrite", true,
                             "resource_type", "image"
                     )
             );
-            return (String) result.get("secure_url");
+            // Build optimized delivery URL — original stored, transformations on CDN
+            return optimizedUrl(publicId);
         } catch (IOException e) {
             throw new IllegalStateException("Cloudinary upload failed: " + e.getMessage());
         }
@@ -58,6 +71,21 @@ public class FileStorageService {
         } catch (IOException ignored) {
             // best-effort — don't fail the request if Cloudinary delete fails
         }
+    }
+
+    /**
+     * Builds a URL with:
+     *  Step 1 — c_fill, g_face, w_500, h_500  (square crop, face-aware)
+     *  Step 2 — f_auto, q_auto                (format + quality optimized)
+     */
+    private String optimizedUrl(String publicId) {
+        return cloudinary.url()
+                .secure(true)
+                .transformation(new Transformation()
+                        .width(500).height(500).crop("fill").gravity("face")
+                        .chain()
+                        .fetchFormat("auto").quality("auto"))
+                .generate(publicId);
     }
 
     private void validate(MultipartFile file) {
