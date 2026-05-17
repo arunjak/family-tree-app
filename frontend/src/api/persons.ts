@@ -22,6 +22,9 @@ export const uploadPhoto = (treeId: number, personId: number, file: File) => {
   })
 }
 
+export const deletePhoto = (treeId: number, personId: number) =>
+  api.delete<Person>(`/trees/${treeId}/persons/${personId}/photo`)
+
 // Relationships
 export const getRelationships = (treeId: number) =>
   api.get<Relationship[]>(`/trees/${treeId}/relationships`)

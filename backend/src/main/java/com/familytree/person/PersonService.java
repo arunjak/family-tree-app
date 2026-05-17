@@ -3,11 +3,13 @@ package com.familytree.person;
 import com.familytree.person.dto.PersonRequest;
 import com.familytree.person.dto.PersonResponse;
 import com.familytree.tree.FamilyTree;
+import com.familytree.common.FileStorageService;
 import com.familytree.relationship.RelationshipRepository;
 import com.familytree.tree.FamilyTreeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -18,6 +20,7 @@ public class PersonService {
     private final PersonRepository personRepository;
     private final FamilyTreeService treeService;
     private final RelationshipRepository relationshipRepository;
+    private final FileStorageService fileStorageService;
 
     public List<PersonResponse> getAllPersons(Long treeId) {
         treeService.getOwnedTree(treeId); // verify ownership
@@ -76,5 +79,33 @@ public class PersonService {
     public Person getPersonEntity(Long treeId, Long personId) {
         return personRepository.findByIdAndTreeId(personId, treeId)
                 .orElseThrow(() -> new IllegalArgumentException("Person not found in this tree"));
+    }
+
+    @Transactional
+    public PersonResponse uploadPhoto(Long treeId, Long personId, MultipartFile file) {
+        treeService.getOwnedTree(treeId);
+        Person person = personRepository.findByIdAndTreeId(personId, treeId)
+                .orElseThrow(() -> new IllegalArgumentException("Person not found"));
+
+        // Delete old photo if present
+        if (person.getPhotoUrl() != null) {
+            fileStorageService.delete(fileStorageService.filenameFromUrl(person.getPhotoUrl()));
+        }
+
+        String filename = fileStorageService.store(file, personId);
+        person.setPhotoUrl("/api/files/" + filename);
+        return PersonResponse.from(personRepository.save(person));
+    }
+
+    @Transactional
+    public PersonResponse deletePhoto(Long treeId, Long personId) {
+        treeService.getOwnedTree(treeId);
+        Person person = personRepository.findByIdAndTreeId(personId, treeId)
+                .orElseThrow(() -> new IllegalArgumentException("Person not found"));
+        if (person.getPhotoUrl() != null) {
+            fileStorageService.delete(fileStorageService.filenameFromUrl(person.getPhotoUrl()));
+            person.setPhotoUrl(null);
+        }
+        return PersonResponse.from(personRepository.save(person));
     }
 }

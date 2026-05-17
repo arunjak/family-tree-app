@@ -265,6 +265,9 @@ export default function FamilyTreeGraph({ persons, relationships, selectedId, on
     // ── Person cards ─────────────────────────────────────────────────────────
     const cardG = root.append('g').attr('class', 'cards')
 
+    // Defs for clip paths (circular photo)
+    const defs = svg.append('defs')
+
     function drawCard(person: Person, x: number, y: number) {
       const isSelected = person.id === selectedId
       const color      = GENDER_COLOR[person.gender ?? ''] ?? '#64748b'
@@ -273,7 +276,7 @@ export default function FamilyTreeGraph({ persons, relationships, selectedId, on
         .attr('cursor', 'pointer')
         .on('click', () => onSelectPerson(person))
 
-      // Shadow / card background
+      // Card background
       g.append('rect')
         .attr('width', CARD_W).attr('height', CARD_H).attr('rx', 12)
         .attr('fill', isSelected ? '#eff6ff' : '#ffffff')
@@ -286,13 +289,26 @@ export default function FamilyTreeGraph({ persons, relationships, selectedId, on
       // Avatar circle
       const ax = AVATAR_R + 10
       const ay = CARD_H / 2
-      g.append('circle').attr('cx', ax).attr('cy', ay).attr('r', AVATAR_R).attr('fill', color)
-      g.append('text')
-        .attr('x', ax).attr('y', ay)
-        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-        .attr('fill', '#fff').attr('font-size', 11).attr('font-weight', 700)
-        .attr('pointer-events', 'none')
-        .text(`${person.firstName[0]}${person.lastName?.[0] ?? ''}`)
+
+      if (person.photoUrl) {
+        const clipId = `clip-${person.id}`
+        defs.append('clipPath').attr('id', clipId)
+          .append('circle').attr('cx', ax).attr('cy', ay).attr('r', AVATAR_R)
+        g.append('image')
+          .attr('href', person.photoUrl)
+          .attr('x', ax - AVATAR_R).attr('y', ay - AVATAR_R)
+          .attr('width', AVATAR_R * 2).attr('height', AVATAR_R * 2)
+          .attr('clip-path', `url(#${clipId})`)
+          .attr('preserveAspectRatio', 'xMidYMid slice')
+      } else {
+        g.append('circle').attr('cx', ax).attr('cy', ay).attr('r', AVATAR_R).attr('fill', color)
+        g.append('text')
+          .attr('x', ax).attr('y', ay)
+          .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+          .attr('fill', '#fff').attr('font-size', 11).attr('font-weight', 700)
+          .attr('pointer-events', 'none')
+          .text(`${person.firstName[0]}${person.lastName?.[0] ?? ''}`)
+      }
 
       // Text area
       const tx = ax + AVATAR_R + 8

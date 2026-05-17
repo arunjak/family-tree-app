@@ -85,10 +85,9 @@ Frontend runs at: http://localhost:5173
 
 - [x] Phase 1 — Project scaffold + Auth + Docker
 - [x] Phase 2 — Person & Relationship CRUD APIs
-- [ ] Phase 3 — React UI + D3.js tree visualization
-- [ ] Phase 4 — Relationship Finder UI
-- [ ] Phase 5 — Photo uploads + polish
-- [ ] Phase 6 — Production deployment (Railway/Render)
+- [x] Phase 3 — React UI + D3.js tree visualization
+- [x] Phase 4 — Photo uploads + Railway deployment
+- [ ] Phase 5 — Polish + testing
 
 ## API Reference
 
@@ -106,6 +105,38 @@ Frontend runs at: http://localhost:5173
 
 ## Context (for Code Puppy 🐾)
 
-- **Current Phase:** 2 complete — All CRUD APIs + BFS graph engine built
-- **Stack decisions:** JWT stateless auth, BFS for relationship finder, D3.js for viz
-- **Next:** Phase 3 - React UI + D3.js Tree Visualization
+- **Current Phase:** 4 complete — Photos + Railway deploy config done
+- **Stack decisions:** Local FS photo storage, JWT auth, BFS relationship finder, D3.js generational tree
+- **Next:** Phase 5 — Polish + testing
+
+## 🚀 Deploy to Railway (your family can use this!)
+
+### Step 1 — Create Railway account
+Go to [railway.app](https://railway.app) → sign up with GitHub
+
+### Step 2 — Deploy Backend
+1. New Project → Deploy from GitHub repo → select `family-tree-app`
+2. Set **Root Directory** = `backend`
+3. Railway auto-detects the Dockerfile ✔️
+4. Add a **PostgreSQL** plugin (one click in Railway dashboard)
+5. Railway auto-injects `DATABASE_URL` — but we use Spring format, so set these env vars manually:
+```
+SPRING_DATASOURCE_URL    = jdbc:postgresql://HOST:PORT/railway
+SPRING_DATASOURCE_USERNAME = postgres
+SPRING_DATASOURCE_PASSWORD = (from Railway PostgreSQL plugin)
+JWT_SECRET               = (generate a random 32+ char string)
+JWT_EXPIRATION_MS        = 86400000
+```
+6. Deploy → note your backend URL (e.g. `https://family-tree-backend.up.railway.app`)
+
+### Step 3 — Deploy Frontend
+1. Add new service in same project → Deploy from GitHub repo
+2. Set **Root Directory** = `frontend`
+3. Set build arg / env var:
+```
+VITE_API_URL = https://family-tree-backend.up.railway.app
+```
+4. Deploy → share the frontend URL with your family! 🌳
+
+### Step 4 — Share with family
+Share the frontend Railway URL. Everyone creates their own account and collaborates on the same tree!

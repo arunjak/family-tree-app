@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { Person, Relationship } from '@/types'
 
 interface Props {
@@ -8,6 +9,8 @@ interface Props {
   onDelete: (p: Person) => void
   onDeleteRelationship: (relationshipId: number) => void
   onAddRelationship: (personId: number) => void
+  onPhotoUpload: (personId: number, file: File) => Promise<void>
+  onPhotoDelete: (personId: number) => Promise<void>
   onClose: () => void
 }
 
@@ -23,8 +26,18 @@ export default function PersonDetailPanel({
   onDelete,
   onDeleteRelationship,
   onAddRelationship,
+  onPhotoUpload,
+  onPhotoDelete,
   onClose,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await onPhotoUpload(person.id, file)
+    e.target.value = '' // reset so same file can be re-uploaded
+  }
   const personName = (p: Person) => `${p.firstName} ${p.lastName ?? ''}`.trim()
 
   const myRelationships = relationships.filter(
@@ -44,13 +57,50 @@ export default function PersonDetailPanel({
         <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition text-lg leading-none" aria-label="Close panel">✕</button>
       </div>
 
-      {/* Avatar */}
+      {/* Avatar / Photo */}
       <div className="flex flex-col items-center py-5 bg-gray-50 border-b border-gray-100">
-        <div className="w-20 h-20 rounded-full bg-[#0053e2] flex items-center justify-center text-white text-2xl font-bold shadow">
-          {person.firstName[0]}{person.lastName?.[0] ?? ''}
+        <div className="relative group">
+          {person.photoUrl ? (
+            <img
+              src={person.photoUrl}
+              alt={person.firstName}
+              className="w-20 h-20 rounded-full object-cover shadow border-2 border-white"
+            />
+          ) : (
+            <div className="w-20 h-20 rounded-full bg-[#0053e2] flex items-center justify-center text-white text-2xl font-bold shadow">
+              {person.firstName[0]}{person.lastName?.[0] ?? ''}
+            </div>
+          )}
+          {/* Photo actions overlay */}
+          <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="Upload photo"
+              className="text-white text-xs bg-white/20 hover:bg-white/30 rounded-full p-1.5 transition"
+            >
+              📷
+            </button>
+            {person.photoUrl && (
+              <button
+                onClick={() => onPhotoDelete(person.id)}
+                title="Remove photo"
+                className="text-white text-xs bg-white/20 hover:bg-red-500/70 rounded-full p-1.5 transition"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <p className="mt-2 text-xs text-gray-400">Hover photo to change</p>
         {person.gender && (
-          <span className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{person.gender.toLowerCase()}</span>
+          <span className="mt-1 text-xs text-gray-500 uppercase tracking-wide">{person.gender.toLowerCase()}</span>
         )}
         {!isAlive && (
           <span className="mt-1 text-xs text-gray-400 italic">† Deceased</span>

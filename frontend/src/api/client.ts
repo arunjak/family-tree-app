@@ -1,8 +1,12 @@
 import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
 
+// In dev: Vite proxies /api → localhost:8080 (vite.config.ts)
+// In prod (Railway): VITE_API_URL = https://your-backend.up.railway.app
+const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: BASE,
   headers: { 'Content-Type': 'application/json' },
 })
 

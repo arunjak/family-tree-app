@@ -4,6 +4,7 @@ import { getTree } from '@/api/trees'
 import {
   getPersons, createPerson, updatePerson, deletePerson,
   getRelationships, createRelationship, deleteRelationship,
+  uploadPhoto, deletePhoto,
 } from '@/api/persons'
 import type { FamilyTree, Person, Relationship, RelationType } from '@/types'
 import Navbar from '@/components/Navbar'
@@ -73,6 +74,18 @@ export default function TreeViewPage() {
   ) => {
     const res = await createRelationship(treeId, { personId, relatedPersonId, relationType })
     setRelationships((prev) => [...prev, res.data])
+  }
+
+  const handlePhotoUpload = async (personId: number, file: File) => {
+    const res = await uploadPhoto(treeId, personId, file)
+    setPersons((prev) => prev.map((p) => (p.id === personId ? res.data : p)))
+    if (selectedPerson?.id === personId) setSelectedPerson(res.data)
+  }
+
+  const handlePhotoDelete = async (personId: number) => {
+    const res = await deletePhoto(treeId, personId)
+    setPersons((prev) => prev.map((p) => (p.id === personId ? res.data : p)))
+    if (selectedPerson?.id === personId) setSelectedPerson(res.data)
   }
 
   const handleDeleteRelationship = async (relationshipId: number) => {
@@ -185,6 +198,8 @@ export default function TreeViewPage() {
             onDelete={handleDeletePerson}
             onDeleteRelationship={handleDeleteRelationship}
             onAddRelationship={openAddRelationship}
+            onPhotoUpload={handlePhotoUpload}
+            onPhotoDelete={handlePhotoDelete}
             onClose={() => setSelectedPerson(null)}
           />
         )}
