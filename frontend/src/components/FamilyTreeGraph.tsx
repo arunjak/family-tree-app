@@ -1,7 +1,153 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import * as d3 from 'd3'
 import type { Person, Relationship } from '@/types'
 
+// ─── Layout constants ────────────────────────────────────────────────────────
+const CARD_W    = 140   // person card width
+const CARD_H    = 76    // person card height
+const AVATAR_R  = 22    // avatar circle radius
+const COUPLE_GAP = 28   // horizontal gap between spouses
+const SIB_GAP   = 28    // min horizontal gap between sibling subtrees
+const FAM_GAP   = 70    // gap between unrelated root families
+const GEN_GAP   = 110   // vertical space between generations
+const PAD       = 80    // canvas padding
+
+const GENDER_COLOR: Record<string, string> = {
+  MALE: '#0053e2', FEMALE: '#be185d', OTHER: '#64748b',
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface Unit {
+  id: string
+  members: Person[]       // 1 (single) or 2 (couple)
+  childIds: string[]      // child unit IDs
+  subtreeW: number        // computed subtree width
+  cx: number              // center-x of this unit (couple midpoint or single center)
+  y: number               // top-y of cards in this unit
+}
+
+// ─── Layout builder ──────────────────────────────────────────────────────────
+function buildLayout(persons: Person[], relationships: Relationship[]) {
+  const personById = new Map(persons.map(p => [p.id, p]))
+  const spouseOf    = new Map<number, number>()
+  const childrenOf  = new Map<number, Set<number>>()
+  const parentsOf   = new Map<number, Set<number>>()
+
+  const addEdge = (m: Map<number, Set<number>>, k: number, v: number) => {
+    if (!m.has(k)) m.set(k, new Set())
+    m.get(k)!.add(v)
+  }
+
+  for (const r of relationships) {
+    if (r.relationType === 'SPOUSE') {
+      spouseOf.set(r.personId, r.relatedPersonId)
+      spouseOf.set(r.relatedPersonId, r.personId)
+    } else if (r.relationType === 'PARENT') {
+      addEdge(childrenOf, r.personId, r.relatedPersonId)
+      addEdge(parentsOf, r.relatedPersonId, r.personId)
+    } else if (r.relationType === 'CHILD') {
+      addEdge(childrenOf, r.relatedPersonId, r.personId)
+      addEdge(parentsOf, r.personId, r.relatedPersonId)
+    }
+  }
+
+  const units        = new Map<string, Unit>()
+  const personToUnit = new Map<number, string>()
+  const inProgress   = new Set<number>()
+
+  function buildUnit(pid: number): string {
+    if (personToUnit.has(pid)) return personToUnit.get(pid)!
+    if (inProgress.has(pid))   return String(pid)
+    inProgress.add(pid)
+
+    const spouseId = spouseOf.get(pid)
+    const useSpouse = spouseId !== undefined && !personToUnit.has(spouseId)
+    const members = useSpouse
+      ? [Math.min(pid, spouseId!), Math.max(pid, spouseId!)]
+      : [pid]
+    const uid = members.join('_')
+
+    if (!units.has(uid)) {
+      const childSet = new Set<number>()
+      for (const m of members)
+        for (const c of childrenOf.get(m) ?? []) childSet.add(c)
+
+      const childUnitSet = new Set<string>()
+      for (const c of childSet)
+        if (!inProgress.has(c)) childUnitSet.add(buildUnit(c))
+
+      for (const m of members) personToUnit.set(m, uid)
+
+      units.set(uid, {
+        id: uid,
+        members: members.map(id => personById.get(id)!).filter(Boolean),
+        childIds: [...childUnitSet],
+        subtreeW: 0, cx: 0, y: 0,
+      })
+    } else {
+      for (const m of members) personToUnit.set(m, uid)
+    }
+
+    inProgress.delete(pid)
+    return uid
+  }
+
+  for (const p of persons) buildUnit(p.id)
+
+  // Find roots (units not referenced as a child)
+  const allChildIds = new Set<string>()
+  for (const u of units.values()) u.childIds.forEach(c => allChildIds.add(c))
+  const rootIds = [...units.keys()].filter(id => !allChildIds.has(id))
+
+  // Own width of a unit (ignoring children)
+  const ownW = (u: Unit) => u.members.length === 2 ? CARD_W * 2 + COUPLE_GAP : CARD_W
+
+  // Bottom-up: compute subtree widths
+  function calcWidth(uid: string): number {
+    const u = units.get(uid)!
+    if (u.childIds.length === 0) { u.subtreeW = ownW(u); return u.subtreeW }
+    const childSum = u.childIds.reduce((s, c) => s + calcWidth(c), 0)
+    const childGaps = (u.childIds.length - 1) * SIB_GAP
+    u.subtreeW = Math.max(ownW(u), childSum + childGaps)
+    return u.subtreeW
+  }
+  for (const rid of rootIds) calcWidth(rid)
+
+  // Top-down: assign positions
+  function assignPos(uid: string, startX: number, y: number) {
+    const u = units.get(uid)!
+    u.cx = startX + u.subtreeW / 2
+    u.y  = y
+
+    if (u.childIds.length === 0) return
+
+    const childrenTotalW = u.childIds.reduce((s, c) => s + units.get(c)!.subtreeW, 0)
+    const childrenGaps   = (u.childIds.length - 1) * SIB_GAP
+    let cx = u.cx - (childrenTotalW + childrenGaps) / 2
+
+    for (const cid of u.childIds) {
+      assignPos(cid, cx, y + CARD_H + GEN_GAP)
+      cx += units.get(cid)!.subtreeW + SIB_GAP
+    }
+  }
+
+  let rx = PAD
+  for (const rid of rootIds) {
+    assignPos(rid, rx, PAD)
+    rx += units.get(rid)!.subtreeW + FAM_GAP
+  }
+
+  return { units, rootIds, personToUnit }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const card1X = (u: Unit) => u.members.length === 2
+  ? u.cx - COUPLE_GAP / 2 - CARD_W : u.cx - CARD_W / 2
+const card2X = (u: Unit) => u.cx + COUPLE_GAP / 2
+const cardBottomY  = (u: Unit) => u.y + CARD_H
+const coupleMidY   = (u: Unit) => u.y + CARD_H / 2
+
+// ─── Component ───────────────────────────────────────────────────────────────
 interface Props {
   persons: Person[]
   relationships: Relationship[]
@@ -9,180 +155,169 @@ interface Props {
   onSelectPerson: (person: Person) => void
 }
 
-interface D3Node extends d3.SimulationNodeDatum {
-  id: number
-  person: Person
-}
-
-interface D3Link extends d3.SimulationLinkDatum<D3Node> {
-  relationship: Relationship
-}
-
-const GENDER_COLOR: Record<string, string> = {
-  MALE: '#0053e2',
-  FEMALE: '#d946ef',
-  OTHER: '#64748b',
-}
-
-const LINK_COLOR: Record<string, string> = {
-  PARENT: '#f59e0b',
-  CHILD: '#10b981',
-  SPOUSE: '#ef4444',
-  SIBLING: '#8b5cf6',
-}
-
 export default function FamilyTreeGraph({ persons, relationships, selectedId, onSelectPerson }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const simulationRef = useRef<d3.Simulation<D3Node, D3Link> | null>(null)
+  const layout = useMemo(
+    () => buildLayout(persons, relationships),
+    [persons, relationships]
+  )
 
   useEffect(() => {
     if (!svgRef.current || persons.length === 0) return
-
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    const width = svgRef.current.clientWidth || 800
-    const height = svgRef.current.clientHeight || 500
+    const { units } = layout
 
-    // Zoom layer
-    const zoomG = svg.append('g')
+    // Compute canvas size
+    let maxX = 0, maxY = 0
+    for (const u of units.values()) {
+      maxX = Math.max(maxX, card1X(u) + (u.members.length === 2 ? CARD_W * 2 + COUPLE_GAP : CARD_W))
+      maxY = Math.max(maxY, u.y + CARD_H)
+    }
+    const canvasW = maxX + PAD
+    const canvasH = maxY + PAD
+
+    svg.attr('viewBox', `0 0 ${canvasW} ${canvasH}`)
+
+    // Zoom / pan
+    const root = svg.append('g')
     svg.call(
       d3.zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.2, 3])
-        .on('zoom', (event) => zoomG.attr('transform', event.transform))
+        .scaleExtent([0.15, 2.5])
+        .on('zoom', e => root.attr('transform', e.transform))
     )
 
-    const nodes: D3Node[] = persons.map((p) => ({ id: p.id, person: p }))
-    const nodeById = new Map(nodes.map((n) => [n.id, n]))
+    // ── Connector lines (drawn first, behind cards) ──────────────────────────
+    const connG = root.append('g').attr('class', 'connectors')
 
-    const links: D3Link[] = relationships
-      .map((r) => ({
-        source: nodeById.get(r.personId)!,
-        target: nodeById.get(r.relatedPersonId)!,
-        relationship: r,
-      }))
-      .filter((l) => l.source && l.target)
+    for (const u of units.values()) {
+      if (u.childIds.length === 0) continue
 
-    // Simulation
-    const simulation = d3.forceSimulation<D3Node>(nodes)
-      .force('link', d3.forceLink<D3Node, D3Link>(links).id((d) => d.id).distance(120))
-      .force('charge', d3.forceManyBody().strength(-400))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide(50))
+      const parentX  = u.cx
+      const parentY  = u.members.length === 2 ? coupleMidY(u) : cardBottomY(u)
+      const junctionY = u.y + CARD_H + GEN_GAP * 0.45
 
-    simulationRef.current = simulation
+      // Drop from parent
+      connG.append('line')
+        .attr('x1', parentX).attr('y1', parentY)
+        .attr('x2', parentX).attr('y2', junctionY)
+        .attr('stroke', '#94a3b8').attr('stroke-width', 1.8)
 
-    // Arrowhead marker
-    svg.append('defs').selectAll('marker')
-      .data(['arrow'])
-      .join('marker')
-      .attr('id', 'arrow')
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 30)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', '#94a3b8')
+      const children = u.childIds.map(id => units.get(id)!)
+      const leftX  = children[0].cx
+      const rightX = children[children.length - 1].cx
 
-    // Links
-    const link = zoomG.append('g')
-      .selectAll('line')
-      .data(links)
-      .join('line')
-      .attr('stroke', (d) => LINK_COLOR[d.relationship.relationType] ?? '#94a3b8')
-      .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.7)
-      .attr('marker-end', 'url(#arrow)')
+      // Horizontal sibling bar
+      if (children.length > 1) {
+        connG.append('line')
+          .attr('x1', leftX).attr('y1', junctionY)
+          .attr('x2', rightX).attr('y2', junctionY)
+          .attr('stroke', '#94a3b8').attr('stroke-width', 1.8)
+      }
 
-    // Link labels
-    const linkLabel = zoomG.append('g')
-      .selectAll('text')
-      .data(links)
-      .join('text')
-      .attr('font-size', 9)
-      .attr('fill', '#64748b')
-      .attr('text-anchor', 'middle')
-      .attr('dy', -4)
-      .text((d) => d.relationship.relationType.toLowerCase())
+      // Drop to each child
+      for (const cu of children) {
+        connG.append('line')
+          .attr('x1', cu.cx).attr('y1', junctionY)
+          .attr('x2', cu.cx).attr('y2', cu.y)
+          .attr('stroke', '#94a3b8').attr('stroke-width', 1.8)
+      }
+    }
 
-    // Node groups
-    const node = zoomG.append('g')
-      .selectAll('g')
-      .data(nodes)
-      .join('g')
-      .attr('cursor', 'pointer')
-      .call(
-        d3.drag<SVGGElement, D3Node>()
-          .on('start', (event, d) => {
-            if (!event.active) simulation.alphaTarget(0.3).restart()
-            d.fx = d.x; d.fy = d.y
-          })
-          .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y })
-          .on('end', (event, d) => {
-            if (!event.active) simulation.alphaTarget(0)
-            d.fx = null; d.fy = null
-          })
-      )
-      .on('click', (_, d) => onSelectPerson(d.person))
+    // ── Couple bars ──────────────────────────────────────────────────────────
+    const coupleG = root.append('g').attr('class', 'couples')
 
-    // Circle
-    node.append('circle')
-      .attr('r', 26)
-      .attr('fill', (d) => GENDER_COLOR[d.person.gender ?? ''] ?? '#64748b')
-      .attr('stroke', (d) => d.person.id === selectedId ? '#ffc220' : '#fff')
-      .attr('stroke-width', (d) => d.person.id === selectedId ? 4 : 2)
-      .attr('filter', (d) => d.person.id === selectedId ? 'drop-shadow(0 0 6px #ffc220)' : '')
+    for (const u of units.values()) {
+      if (u.members.length < 2) continue
+      const barY = coupleMidY(u)
+      const x1 = card1X(u) + CARD_W   // right edge of left card
+      const x2 = card2X(u)            // left edge of right card
 
-    // Initials
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .attr('fill', '#fff')
-      .attr('font-size', 13)
-      .attr('font-weight', 'bold')
-      .attr('pointer-events', 'none')
-      .text((d) => `${d.person.firstName[0]}${d.person.lastName?.[0] ?? ''}`)
+      coupleG.append('line')
+        .attr('x1', x1).attr('y1', barY)
+        .attr('x2', x2).attr('y2', barY)
+        .attr('stroke', '#fda4af').attr('stroke-width', 2.5)
+        .attr('stroke-dasharray', '4 2')
 
-    // Name label
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', 42)
-      .attr('font-size', 11)
-      .attr('fill', '#1e293b')
-      .attr('font-weight', '500')
-      .attr('pointer-events', 'none')
-      .text((d) => `${d.person.firstName} ${d.person.lastName ?? ''}`.trim())
+      coupleG.append('text')
+        .attr('x', u.cx).attr('y', barY + 4.5)
+        .attr('text-anchor', 'middle').attr('font-size', 13)
+        .text('❤')
+    }
 
-    // Deceased indicator
-    node.filter((d) => !!d.person.dateOfDeath)
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', 54)
-      .attr('font-size', 9)
-      .attr('fill', '#94a3b8')
-      .attr('pointer-events', 'none')
-      .text('† deceased')
+    // ── Person cards ─────────────────────────────────────────────────────────
+    const cardG = root.append('g').attr('class', 'cards')
 
-    // Tick
-    simulation.on('tick', () => {
-      link
-        .attr('x1', (d) => (d.source as D3Node).x!)
-        .attr('y1', (d) => (d.source as D3Node).y!)
-        .attr('x2', (d) => (d.target as D3Node).x!)
-        .attr('y2', (d) => (d.target as D3Node).y!)
+    function drawCard(person: Person, x: number, y: number) {
+      const isSelected = person.id === selectedId
+      const color      = GENDER_COLOR[person.gender ?? ''] ?? '#64748b'
+      const g          = cardG.append('g')
+        .attr('transform', `translate(${x},${y})`)
+        .attr('cursor', 'pointer')
+        .on('click', () => onSelectPerson(person))
 
-      linkLabel
-        .attr('x', (d) => ((d.source as D3Node).x! + (d.target as D3Node).x!) / 2)
-        .attr('y', (d) => ((d.source as D3Node).y! + (d.target as D3Node).y!) / 2)
+      // Shadow / card background
+      g.append('rect')
+        .attr('width', CARD_W).attr('height', CARD_H).attr('rx', 12)
+        .attr('fill', isSelected ? '#eff6ff' : '#ffffff')
+        .attr('stroke', isSelected ? '#ffc220' : '#e2e8f0')
+        .attr('stroke-width', isSelected ? 3 : 1.5)
+        .style('filter', isSelected
+          ? 'drop-shadow(0 0 8px rgba(255,194,32,0.55))'
+          : 'drop-shadow(0 2px 6px rgba(0,0,0,0.09))')
 
-      node.attr('transform', (d) => `translate(${d.x},${d.y})`)
-    })
+      // Avatar circle
+      const ax = AVATAR_R + 10
+      const ay = CARD_H / 2
+      g.append('circle').attr('cx', ax).attr('cy', ay).attr('r', AVATAR_R).attr('fill', color)
+      g.append('text')
+        .attr('x', ax).attr('y', ay)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', '#fff').attr('font-size', 11).attr('font-weight', 700)
+        .attr('pointer-events', 'none')
+        .text(`${person.firstName[0]}${person.lastName?.[0] ?? ''}`)
 
-    return () => { simulation.stop() }
-  }, [persons, relationships, selectedId, onSelectPerson])
+      // Text area
+      const tx = ax + AVATAR_R + 8
+      const fullName = `${person.firstName} ${person.lastName ?? ''}`.trim()
+      const name     = fullName.length > 13 ? fullName.slice(0, 12) + '…' : fullName
+
+      g.append('text')
+        .attr('x', tx).attr('y', ay - (person.dateOfBirth ? 12 : 5))
+        .attr('font-size', 11).attr('font-weight', 600).attr('fill', '#0f172a')
+        .attr('pointer-events', 'none')
+        .text(name)
+
+      if (person.dateOfBirth) {
+        const by = new Date(person.dateOfBirth).getFullYear()
+        const dy = person.dateOfDeath ? new Date(person.dateOfDeath).getFullYear() : null
+        g.append('text')
+          .attr('x', tx).attr('y', ay + 4)
+          .attr('font-size', 9).attr('fill', '#64748b')
+          .attr('pointer-events', 'none')
+          .text(dy ? `${by} – ${dy}` : `b. ${by}`)
+      }
+
+      if (person.dateOfDeath) {
+        g.append('text')
+          .attr('x', tx).attr('y', ay + 15)
+          .attr('font-size', 8.5).attr('fill', '#94a3b8').attr('font-style', 'italic')
+          .attr('pointer-events', 'none')
+          .text('† Deceased')
+      }
+    }
+
+    for (const u of units.values()) {
+      if (u.members.length === 1) {
+        drawCard(u.members[0], card1X(u), u.y)
+      } else {
+        drawCard(u.members[0], card1X(u), u.y)
+        drawCard(u.members[1], card2X(u), u.y)
+      }
+    }
+
+  }, [layout, selectedId, onSelectPerson, persons.length])
 
   if (persons.length === 0) {
     return (
@@ -195,27 +330,26 @@ export default function FamilyTreeGraph({ persons, relationships, selectedId, on
   }
 
   return (
-    <div className="flex-1 relative bg-gray-50">
+    <div className="flex-1 relative bg-slate-50 overflow-hidden">
       {/* Legend */}
-      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur rounded-xl border border-gray-200 p-3 text-xs space-y-1 z-10 shadow-sm">
-        <p className="font-semibold text-gray-600 mb-2">Relationships</p>
-        {Object.entries(LINK_COLOR).map(([type, color]) => (
-          <div key={type} className="flex items-center gap-2">
-            <div className="w-4 h-0.5" style={{ background: color }} />
-            <span className="text-gray-600 capitalize">{type.toLowerCase()}</span>
-          </div>
-        ))}
-        <p className="font-semibold text-gray-600 mt-3 mb-1">Gender</p>
+      <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur rounded-xl border border-gray-200 shadow-sm p-3 text-xs space-y-1.5">
+        <p className="font-semibold text-gray-500 uppercase tracking-wide text-[10px] mb-2">Gender</p>
         {Object.entries(GENDER_COLOR).map(([g, c]) => (
           <div key={g} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ background: c }} />
+            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: c }} />
             <span className="text-gray-600 capitalize">{g.toLowerCase()}</span>
           </div>
         ))}
+        <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
+          <span className="text-pink-400 text-sm">❤</span>
+          <span className="text-gray-600">Couple</span>
+        </div>
       </div>
-      <p className="absolute bottom-3 right-3 text-xs text-gray-400 z-10">
+
+      <p className="absolute bottom-3 right-3 z-10 text-[11px] text-gray-400">
         Scroll to zoom · Drag to pan · Click a person
       </p>
+
       <svg ref={svgRef} className="w-full h-full" />
     </div>
   )
